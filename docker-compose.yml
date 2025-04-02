@@ -1,0 +1,60 @@
+services:
+  pulsar:
+    image: apachepulsar/pulsar:4.0.3
+    container_name: fr-local-pulsar
+    ports:
+      - 8888:8080
+      - 6650:6650
+    environment:
+      PULSAR_MEM: " -Xms512m -Xmx512m -XX:MaxDirectMemorySize=1g"
+    command: >
+      /bin/bash -c "bin/apply-config-from-env.py conf/standalone.conf && bin/pulsar standalone"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:8080/admin/v2/brokers/health"
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 2m
+
+  pulsar-init:
+    image: docker
+    container_name: fr-local-pulsar-init
+    privileged: true
+    depends_on:
+      pulsar:
+        condition: service_healthy
+    command: >
+      /bin/sh -c "echo 'Initializing Pulsar...' &&
+      docker exec fr-local-pulsar bin/pulsar-admin tenants create fr > /dev/null 2>&1 || true &&
+      echo 'Created fr tenant ' &&
+      docker exec fr-local-pulsar bin/pulsar-admin namespaces create fr/sticky > /dev/null 2>&1 || true &&
+      echo 'Created fr/sticky ' &&
+      docker exec fr-local-pulsar bin/pulsar-admin namespaces create fr/handler > /dev/null 2>&1 || true &&
+      echo 'Created fr/handler ' &&
+      echo 'Pulsar initialized. Namespaces:' &&
+      docker exec fr-local-pulsar bin/pulsar-admin namespaces list fr &&
+      tail -F /etc/hosts"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  valkey:
+    image: valkey/valkey:8.0.2
+    container_name: fr-valkey
+    environment:
+      # ALLOW_EMPTY_PASSWORD is recommended only for development.
+      - ALLOW_EMPTY_PASSWORD=yes
+      - VALKEY_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+    ports:
+      - '6379:6379'
+    volumes:
+      - 'valkey_data:/valkey/data'
+
+volumes:
+  valkey_data:
+    driver: local

@@ -1,0 +1,7 @@
+cache/
+out/
+.vscode/*
+metals.sbt
+.jvmopts
+target/
+.idea/
