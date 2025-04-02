@@ -5,3 +5,4 @@ metals.sbt
 .jvmopts
 target/
 .idea/
+.bsp/
