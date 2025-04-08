@@ -27,4 +27,6 @@ object TableState {
   }
 
   implicit val codec: Codec[TableState] = deriveCodec
+
+  def empty(tid: TableId): TableState = TableState(tid, List.empty, None)
 }

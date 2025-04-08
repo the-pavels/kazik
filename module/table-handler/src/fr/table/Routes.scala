@@ -21,14 +21,6 @@ case class Routes(tableManager: TableManager) extends Http4sDsl[IO] {
 
       result.handleErrorWith(errorHandler)
 
-    case GET -> Root / "tables" =>
-      val result = for {
-        list     <- tableManager.list
-        response <- Ok(list)
-      } yield response
-
-      result.handleErrorWith(errorHandler)
-
     case req @ POST -> Root / "closeBets" =>
       val result = for {
         closeBet <- req.as[CloseBetsRequest]

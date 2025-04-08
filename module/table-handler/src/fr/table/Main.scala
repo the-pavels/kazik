@@ -6,9 +6,10 @@ import cr.pulsar.{Subscription, Pulsar => PulsarClient}
 import dev.profunktor.redis4cats.connection.RedisClient
 import dev.profunktor.redis4cats.effect.Log.NoOp.instance
 import fr.domain.Event.{TableUserEvent, UserTableEvent}
+import fr.domain.{TableId, TableState}
 import fr.http.HttpServer
 import fr.pulsar.{AppTopic, LoggingConsumer, LoggingProducer, Pulsar}
-import fr.redis.{LockStore, Transactor}
+import fr.redis.StateStorage
 import org.http4s.HttpRoutes
 
 import java.util.UUID
@@ -16,9 +17,7 @@ import java.util.UUID
 object TableHandlerApp {
   def resource(pulsar: PulsarClient.Underlying, redis: RedisClient): Resource[IO, (fs2.Stream[IO, Unit], HttpRoutes[IO])] =
     for {
-      lockStore <- LockStore.make(redis)
-      transactor = Transactor.make(lockStore)
-      stateStorage <- StateStorage.make(redis, transactor)
+      stateStorage <- StateStorage.redis[TableId, TableState](redis, _.asKey, TableState.empty)
 
       userBroadcast = (e: TableUserEvent) => LoggingProducer.sharded[TableUserEvent](pulsar, AppTopic.TableUser.make).use(_.send_(e))
       dispatcher    = Dispatcher.make(userBroadcast)

@@ -6,7 +6,7 @@ import cats.syntax.all._
 import cr.pulsar.{Consumer, Subscription, Pulsar => PulsarClient}
 import fr.domain.Event.OutgoingUserEvent
 import fr.domain.UserId
-import fr.pulsar.AppTopic.UserOutbox
+import fr.pulsar.AppTopic.ServerToClient
 import fr.pulsar.LoggingConsumer
 import fr.sticky.Routes.UserIdQueryParam
 import org.http4s._
@@ -24,7 +24,7 @@ case class Routes(wsHandler: WebSocketHandler, client: PulsarClient.Underlying, 
       .withMode(Subscription.Mode.NonDurable)
       .build
 
-    LoggingConsumer.make[OutgoingUserEvent](client, UserOutbox(uid.value.toString).make, subscription).onError {
+    LoggingConsumer.make[OutgoingUserEvent](client, ServerToClient(uid.value.toString).make, subscription).onError {
       case ex =>
         Resource.eval(IO.println(s"Error while consuming messages for uid: ${uid.show}: ${ex.getMessage}"))
     }

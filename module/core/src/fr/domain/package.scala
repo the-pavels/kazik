@@ -3,8 +3,7 @@ package fr
 import cats.implicits.toShow
 import cats.{Eq, Show}
 import ciris.ConfigValue
-import fr.redis.LockStore.LockKey
-import io.circe.{Codec, Decoder, Encoder, KeyDecoder, KeyEncoder}
+import io.circe._
 import io.estatico.newtype.Coercible
 import io.estatico.newtype.macros.newtype
 import io.estatico.newtype.ops._
@@ -20,7 +19,7 @@ package object domain {
 
   @newtype
   case class UserId(value: UUID) {
-    def asLock: LockKey = LockKey(s"user-$value")
+    def asKey: String = s"user:$value"
   }
   object UserId {
     implicit val codec: Codec[UserId] = Codec.from(Decoder.decodeString.map(s => UserId(UUID.fromString(s))), Encoder.encodeString.contramap[UserId](_.show))
@@ -44,7 +43,7 @@ package object domain {
 
   @newtype
   case class TableId(value: UUID) {
-    def asLock: LockKey = LockKey(s"table-$value")
+    def asKey: String = s"table:$value"
   }
   object TableId {
     implicit val encoder: Encoder[TableId] =
@@ -54,7 +53,6 @@ package object domain {
     implicit val eqv: Eq[TableId]    = Eq.fromUniversalEquals
     implicit val show: Show[TableId] = Show.fromToString
   }
-
   @newtype
   case class GameId(value: UUID)
   object GameId {

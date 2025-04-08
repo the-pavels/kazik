@@ -75,10 +75,11 @@ object IncomingHandler {
       case TUE.BetAccepted(_, tid, gid, uid, bet, _) =>
         for {
           _ <- IO.println(s"User $uid bet accepted, amount: ${bet.amount}, table: $tid, game: $gid")
-          _ <- userManager.updateState(uid) {
+          state <- userManager.updateState(uid) {
             case UserState(uid, balance, blocked, tables) => UserState(uid, balance, blocked - bet.amount, tables)
           }
           _ <- dispatcher.dispatch(OUE.BetAccepted(_, uid, bet, tid, gid, _))
+          _ <- dispatcher.dispatch(OUE.BalanceUpdated(_, uid, state.balance, _))
         } yield ()
       case TUE.BetRemoved(_, tid, gid, uid, bet, _) =>
         for {
@@ -114,10 +115,10 @@ object IncomingHandler {
       case TUE.BetWon(_, tid, gid, uid, amount, _) =>
         for {
           _ <- IO.println(s"[$uid] Table $tid, game $gid won $amount")
-          _ <- userManager.updateState(uid) {
+          state <- userManager.updateState(uid) {
             case UserState(uid, balance, blocked, tables) => UserState(uid, balance + amount, blocked, tables)
           }
-          _ <- dispatcher.dispatch(OUE.BalanceUpdated(_, uid, amount, _))
+          _ <- dispatcher.dispatch(OUE.BalanceUpdated(_, uid, state.balance, _))
         } yield ()
     }
   }

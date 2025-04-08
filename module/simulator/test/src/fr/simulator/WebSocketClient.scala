@@ -94,7 +94,9 @@ object WebSocketClient {
                   .liftTo[IO]
                   .flatTap(e => handlersRef.get.flatMap(_.traverse_(h => h(e))))
                   .flatMap(e => logger.info(s"IN $uid >>> $e") *> queue.offer(e))
-                  .onError(e => logger.error(s"$uid Couldn't parse incoming message. Expected OUE, input: $msg Ex: $e"))
+                  .onError { e =>
+                    logger.error(s"$uid Couldn't parse incoming message. Expected OUE, input: $msg Ex: $e") *> IO(throw e)
+                  }
               } >> listenEvents
         }
     }

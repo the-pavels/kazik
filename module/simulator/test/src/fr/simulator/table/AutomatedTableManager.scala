@@ -24,12 +24,13 @@ class AutomatedTableManager(client: HttpClient) {
   def stop: IO[Unit] = killSwitch.set(false)
 
   def start(tid: TableId): IO[Unit] = {
-    def run: IO[Unit] =
+    def run(i: Int): IO[Unit] =
       for {
         continue <- killSwitch.get
         _ <- if (!continue) IO.unit
         else
           for {
+            _      <- IO.println(s"Running round $i on table $tid")
             _      <- tableManager.openBets(tid)
             _      <- IO.sleep(5.seconds)
             _      <- tableManager.closeBets(tid)
@@ -37,11 +38,11 @@ class AutomatedTableManager(client: HttpClient) {
             result <- IO(Random.nextInt(37))
             _      <- tableManager.setResult(tid, result)
             _      <- IO.sleep(2.seconds)
-            _      <- run
+            _      <- run(i + 1)
           } yield ()
       } yield ()
 
-    run
+    run(1)
   }
 
 }

@@ -22,13 +22,13 @@ object AppTopic {
   private def forHandler(name: String, typ: Type): Topic.Single =
     Topic.single(FRTenant, "handler", name, typ)
 
-  case object UserInbox extends AppTopic {
+  case object ClientToServer extends AppTopic {
     val name: String       = s"user-incoming"
     val `type`: Type       = Type.NonPersistent
     def make: Topic.Single = forHandler(name, `type`)
   }
 
-  case class UserOutbox(uid: String) extends AppTopic {
+  case class ServerToClient(uid: String) extends AppTopic {
     val name: String       = s"user-outbox-$uid"
     val `type`: Type       = Type.NonPersistent
     def make: Topic.Single = forSticky(name, `type`)

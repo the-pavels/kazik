@@ -6,9 +6,9 @@ import cr.pulsar.{Subscription, Pulsar => PulsarClient}
 import dev.profunktor.redis4cats.connection.RedisClient
 import dev.profunktor.redis4cats.effect.Log.NoOp.instance
 import fr.domain.Event.{OutgoingUserEvent, TableUserEvent, UserEvent, UserTableEvent}
-import fr.domain.UserId
+import fr.domain.{UserId, UserState}
 import fr.pulsar.{AppTopic, LoggingConsumer, LoggingProducer, Pulsar}
-import fr.redis.{LockStore, Transactor}
+import fr.redis.StateStorage
 import fr.user.IncomingHandler.Incoming
 
 import java.util.UUID
@@ -16,16 +16,14 @@ import java.util.UUID
 object UserHandlerApp {
   def resource(pulsar: PulsarClient.Underlying, redis: RedisClient): Resource[IO, fs2.Stream[IO, Unit]] =
     for {
-      stateStorage <- StateStorage.make(redis)
+      stateStorage <- StateStorage.redis[UserId, UserState](redis, _.asKey, UserState.empty)
 
       userBroadcast = (uid: UserId) =>
-        (e: OutgoingUserEvent) => LoggingProducer.default[OutgoingUserEvent](pulsar, AppTopic.UserOutbox(uid.value.show).make).use(_.send_(e))
+        (e: OutgoingUserEvent) => LoggingProducer.default[OutgoingUserEvent](pulsar, AppTopic.ServerToClient(uid.value.show).make).use(_.send_(e))
       tableBroadcast = (e: UserTableEvent) => LoggingProducer.sharded[UserTableEvent](pulsar, AppTopic.UserTable.make).use(_.send_(e))
       dispatcher     = Dispatcher.make(userBroadcast, tableBroadcast)
 
-      lockStore <- LockStore.make(redis)
-      transactor  = Transactor.make(lockStore)
-      userManager = UserManager.make(stateStorage, transactor)
+      userManager = UserManager.make(stateStorage)
 
       incomingHandler = IncomingHandler.make(userManager, dispatcher)
 
@@ -41,7 +39,7 @@ object UserHandlerApp {
         .withMode(Subscription.Mode.NonDurable)
         .build
 
-      userEvents  <- LoggingConsumer.make[UserEvent](pulsar, AppTopic.UserInbox.make, subscription1)
+      userEvents  <- LoggingConsumer.make[UserEvent](pulsar, AppTopic.ClientToServer.make, subscription1)
       tableEvents <- LoggingConsumer.make[TableUserEvent](pulsar, AppTopic.TableUser.make, subscription2)
 
       userEventsProcessor     = userEvents.process(e => incomingHandler.process(Incoming.UserEvent(e)))

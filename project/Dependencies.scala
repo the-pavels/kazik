@@ -38,7 +38,6 @@ object Dependencies {
     val CirisCore    = "is.cir"        %% "ciris"                % V.Ciris
 
     val Doobie              = "org.tpolecat" %% "doobie-core"           % V.Doobie
-    val DoobieH2            = "org.tpolecat" %% "doobie-h2"             % V.Doobie
     val DoobieHikari        = "org.tpolecat" %% "doobie-hikari"         % V.Doobie
     val DoobiePostgres      = "org.tpolecat" %% "doobie-postgres"       % V.Doobie
     val DoobiePostgresCirce = "org.tpolecat" %% "doobie-postgres-circe" % V.Doobie
