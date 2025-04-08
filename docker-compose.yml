@@ -55,6 +55,40 @@ services:
     volumes:
       - 'valkey_data:/valkey/data'
 
+  postgres:
+    image: timescale/timescaledb:2.10.3-pg13
+    ports:
+      - 5432:5432
+    environment:
+      - DEBUG=false
+      - POSTGRES_SCHEMA=public
+      - POSTGRES_USER=fr
+      - POSTGRES_PASSWORD=mysecretpassword
+      - POSTGRES_HOST_AUTH_METHOD=md5
+    command: postgres -c max_connections=200
+    volumes:
+      - ./scala/db/dev/databases.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U fr -d roulette" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  flyway-roulette:
+    image: flyway/flyway:10.3.0
+    command: migrate
+    environment:
+      - FLYWAY_USER=fr
+      - FLYWAY_PASSWORD=mysecretpassword
+      - FLYWAY_URL=jdbc:postgresql://postgres:5432/roulette
+      - FLYWAY_SCHEMAS=public
+      - FLYWAY_GROUP=true
+      - FLYWAY_CONNECT_RETRIES=60
+    volumes:
+      - $PWD/db/roulette/sql:/flyway/sql
+    depends_on:
+      - postgres
+
 volumes:
   valkey_data:
     driver: local

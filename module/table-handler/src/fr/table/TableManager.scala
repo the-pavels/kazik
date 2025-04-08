@@ -19,7 +19,7 @@ trait TableManager {
   def setResult(tid: TableId, result: Int): IO[Unit]
 
   def updateState(tid: TableId)(f: TableState => TableState): IO[TableState]
-  def updateStateF(tid: TableId)(f: TableState => IO[TableState]): IO[TableState]
+  def updateStateOpt(tid: TableId)(f: TableState => Option[TableState]): IO[Option[TableState]]
 }
 
 object TableManager {
@@ -28,8 +28,20 @@ object TableManager {
     def create(tid: TableId): IO[Unit]           = stateStorage.put(tid, TableState(tid, List.empty, None))
     def closeBets(tid: TableId): IO[Unit] =
       stateStorage
-        .updateState(tid) { ts =>
-          ts.copy(game = ts.game.map(g => g.copy(state = BetsClosed)))
+        .updateState(tid) {
+          case s @ TableState(_, users, Some(game)) =>
+          val updatedGame = game.copy(state = BetsClosed)
+          val evenˆts = users.map { user =>
+            TUE.BetsClosed(_, tid, game.id, user, _)
+          }
+          updatedState.game match {
+            case Some(game) =>
+              IO.println(s"Bets closed for game ${game.id} on table $tid") *>
+                updatedState.users.traverse_ { user =>
+                  dispatcher.dispatch(TUE.BetsClosed(_, tid, game.id, user, _))
+                }
+            case s => s
+          }
         }
         .flatMap { updatedState =>
           updatedState.game match {
@@ -88,7 +100,6 @@ object TableManager {
     def updateState(tid: TableId)(f: TableState => TableState): IO[TableState] =
       stateStorage.updateState(tid)(f)
 
-    def updateStateF(tid: TableId)(f: TableState => IO[TableState]): IO[TableState] =
-      stateStorage.updateStateF(tid)(f)
+    override def updateStateOpt(tid: TableId)(f: TableState => Option[TableState]): IO[Option[TableState]] = stateStorage.updateStateOpt(tid)(f)
   }
 }

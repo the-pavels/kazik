@@ -41,15 +41,13 @@ object IncomingHandler {
           } yield ()
         case UTE.BetPlaced(_, uid, bet, tid, gid, _) =>
           for {
-            _ <- tableManager.updateStateF(tid) {
+            _ <- tableManager.updateState(tid) {
               case s @ TableState(tid, users, Some(game)) if gid == game.id && game.betsOpen =>
-                if (game.betExists(uid, bet.id)) IO.pure(s)
+                if (game.betExists(uid, bet.id)) s
                 else {
                   val userBets    = game.bets.getOrElse(uid, List.empty) :+ bet
                   val updatedGame = game.copy(bets = game.bets + (uid -> userBets))
-                  val newState    = TableState(tid, users, Some(updatedGame))
-                  IO.println(s"User $uid placed bet, amount: ${bet.amount}, table: $tid, game: $gid") *>
-                    dispatcher.dispatch(TUE.BetAccepted(_, tid, gid, uid, bet, _)).as(newState)
+                  TableState(tid, users, Some(updatedGame))
                 }
               case s @ TableState(_, _, Some(game)) =>
                 IO.println(s"User $uid placed bet, but it got rejected: ${game.state}") *>
@@ -59,7 +57,7 @@ object IncomingHandler {
           } yield ()
         case UTE.BetRemoved(_, uid, tid, gid, _) =>
           for {
-            _ <- tableManager.updateStateF(tid) {
+            _ <- tableManager.updateStateOpt(tid) {
               case TableState(tid, users, Some(game)) =>
                 val bet          = game.bets.getOrElse(uid, List.empty)
                 val updatedGame  = game.copy(bets = game.bets - uid)
