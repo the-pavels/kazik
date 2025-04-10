@@ -18,6 +18,18 @@ package object domain {
   }
 
   @newtype
+  case class EventId(value: UUID)
+
+  object EventId {
+    implicit val encoder: Encoder[EventId] =
+      Encoder.encodeString.contramap[EventId](_.toString())
+    implicit val decoder: Decoder[EventId] =
+      Decoder.decodeString.map(s => EventId(UUID.fromString(s)))
+    implicit val eqv: Eq[EventId]    = Eq.fromUniversalEquals
+    implicit val show: Show[EventId] = Show.fromToString
+  }
+
+  @newtype
   case class UserId(value: UUID) {
     def asKey: String = s"user:$value"
   }

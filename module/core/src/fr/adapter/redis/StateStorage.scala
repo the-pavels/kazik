@@ -1,4 +1,4 @@
-package fr.redis
+package fr.adapter.redis
 
 import cats.Show
 import cats.effect.IO
@@ -25,15 +25,16 @@ import doobie.implicits._
 import doobie.postgres.implicits._
 import doobie.postgres.circe.jsonb.implicits._
 
-sealed trait StateStorage[K, S, E] {
+import java.time.Instant
+
+sealed trait StateStorage[K, S, R] {
   def get(key: K): IO[Option[S]]
   def put(key: K, state: S): IO[Unit]
-  def updateState(key: K)(f: S => (S, List[E])): IO[(S, List[E])]
+  def updateState(key: K)(f: S => (S, R)): IO[R]
 //  def updateStateF(key: K)(f: S => IO[S]): IO[S]
 }
 
 object StateStorage {
-
   final val CAS_SCRIPT_CONTENT =
     """
       |local current_val = redis.call('GET', KEYS[1])
@@ -58,12 +59,12 @@ object StateStorage {
 
   final val CAS_SCRIPT_NIL_MARKER = "__EXPECT_NIL__"
 
-  def redis[K, S: Codec, E](client: RedisClient, mkKey: K => String, default: K => S): Resource[IO, StateStorage[K, S, E]] =
+  def redis[K, S: Codec, R](client: RedisClient, mkKey: K => String, default: K => S): Resource[IO, StateStorage[K, S, R]] =
     for {
       redisDefault  <- Redis[IO].fromClient(client, RedisCodec.Utf8)
       casScriptSha1 <- Resource.eval(redisDefault.scriptLoad(CAS_SCRIPT_CONTENT))
       _             <- Resource.eval(IO.println(s"Loaded CAS Lua script with SHA1: $casScriptSha1")) // Optional: Log success
-    } yield new StateStorage[K, S, E] {
+    } yield new StateStorage[K, S, R] {
       override def get(key: K): IO[Option[S]] =
         redisDefault
           .get(mkKey(key))
@@ -72,7 +73,7 @@ object StateStorage {
       override def put(key: K, state: S): IO[Unit] =
         redisDefault.set(mkKey(key), state.asJson.noSpaces).void
 
-      override def updateState(key: K)(f: S => (S, List[E])): IO[(S, List[E])] = ???
+      override def updateState(key: K)(f: S => (S, R)): IO[R] = ???
 //        updateStateF(key)(s => IO.pure(f(s)))
 
 //      override def updateStateF(key: K)(f: S => IO[S]): IO[S] = {
@@ -126,9 +127,11 @@ object StateStorage {
 //      }
     }
 
-  def postgres[K: Show, S: Codec: Read, E](table: String, transactor: Transactor[IO], default: K => S): StateStorage[K, S, E] = new StateStorage[K, S, E] {
+  // TODO default can be taken from typeclass
+  // TODO key shouldn't be a string
+  def postgres[K: Show, S: Codec: Read, R](table: String, transactor: Transactor[IO], default: K => S): StateStorage[K, S, R] = new StateStorage[K, S, R] {
     private def _get(key: K): ConnectionIO[Option[S]] = {
-      val k = Show[K].show(key) // TODO key shouldn't be a string
+      val k = Show[K].show(key)
       sql"""SELECT * FROM $table WHERE id = $k""".query[S].option
     }
     private def _put(key: K, state: S): Update0 = {
@@ -139,13 +142,13 @@ object StateStorage {
 
     override def get(key: K): IO[Option[S]]      = _get(key).transact(transactor)
     override def put(key: K, state: S): IO[Unit] = _put(key, state).run.transact(transactor).void
-    override def updateState(key: K)(f: S => (S, List[E])): IO[(S, List[E])] = {
+    override def updateState(key: K)(f: S => (S, R)): IO[R] = {
       val update = for {
         currentState <- _get(key)
         state              = currentState.getOrElse(default(key))
-        (updatedState, es) = f(state)
-        _ <- _put(key, updatedState).run
-      } yield (updatedState, es)
+        (newState, result) = f(state)
+        _ <- _put(key, newState).run
+      } yield result
 
       update.transact(transactor)
     }

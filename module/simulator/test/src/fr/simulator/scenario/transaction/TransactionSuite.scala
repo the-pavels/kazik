@@ -6,8 +6,9 @@ import dev.profunktor.redis4cats.Redis
 import dev.profunktor.redis4cats.connection.RedisClient
 import dev.profunktor.redis4cats.data.RedisCodec
 import dev.profunktor.redis4cats.effect.Log.NoOp.instance
-import fr.domain.{TableId, TableState, UserId}
-import fr.redis.StateStorage
+import fr.adapter.redis.StateStorage
+import fr.domain.table.TableState
+import fr.domain.{TableId, UserId}
 import fr.simulator.scenario.setup.IOSpec
 
 import java.util.UUID

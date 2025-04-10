@@ -1,6 +1,7 @@
-package fr.domain
+package fr.domain.game.roulette
 
 import cats.{Eq, Show}
+import fr.domain.BetId
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 

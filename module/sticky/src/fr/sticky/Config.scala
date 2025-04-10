@@ -3,8 +3,8 @@ package fr.sticky
 import cats.effect.kernel.Async
 import ciris._
 import cr.pulsar.Pulsar.PulsarURL
+import fr.adapter.pulsar.cfgDecoderURL
 import fr.domain.ConfigOps
-import fr.pulsar._
 
 case class Config(
     pulsarURL: PulsarURL

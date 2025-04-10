@@ -1,4 +1,5 @@
-package fr
+package fr.adapter
+
 import cats._
 import cats.effect.IO
 import cats.effect.kernel.Resource
@@ -9,7 +10,7 @@ import cr.pulsar.Pulsar.PulsarURL
 import cr.pulsar.Topic.URL
 import cr.pulsar.{Pulsar => PulsarClient, ShardKey => _, _}
 import fr.domain._
-import fr.pulsar.ShardKey.SyntaxOps
+import fr.adapter.pulsar.ShardKey.SyntaxOps
 import io.circe.parser.decode
 import io.circe.syntax.EncoderOps
 import io.circe.{Decoder, Encoder}

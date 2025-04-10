@@ -1,6 +1,7 @@
 package fr.table
 
-import fr.domain.{Bet, UserId}
+import fr.domain.UserId
+import fr.domain.game.roulette.Bet
 
 object WinningCalculator {
   def winnings(bets: Map[UserId, List[Bet]], result: Int): Map[UserId, Int] = {

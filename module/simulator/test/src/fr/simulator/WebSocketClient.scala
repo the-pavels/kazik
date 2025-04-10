@@ -8,7 +8,7 @@ import cats.effect.Ref
 import cats.effect.std.Queue
 import cats.syntax.all._
 import fr.domain.Event.{OutgoingUserEvent => OUE}
-import fr.domain.{UserAction => UA}
+import fr.domain.user.{UserInput => UA}
 import io.circe.parser.{decode => jsonDecode}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger

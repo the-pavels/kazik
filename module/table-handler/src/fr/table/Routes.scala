@@ -7,10 +7,9 @@ import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 import org.http4s.{HttpRoutes, Response}
 import org.http4s.circe.CirceEntityDecoder._
-import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.dsl.Http4sDsl
 
-case class Routes(tableManager: TableManager) extends Http4sDsl[IO] {
+case class Routes(tableManager: TableManager, dispatcher: Dispatcher) extends Http4sDsl[IO] {
   val routes: HttpRoutes[IO] = HttpRoutes.of {
     case req @ POST -> Root / "table" =>
       val result = for {
@@ -24,7 +23,8 @@ case class Routes(tableManager: TableManager) extends Http4sDsl[IO] {
     case req @ POST -> Root / "closeBets" =>
       val result = for {
         closeBet <- req.as[CloseBetsRequest]
-        _        <- tableManager.closeBets(closeBet.tid)
+        result   <- tableManager.closeBets(closeBet.tid)
+        _        <- dispatcher.dispatchAll(result.events)
         response <- Ok()
       } yield response
 
@@ -33,7 +33,8 @@ case class Routes(tableManager: TableManager) extends Http4sDsl[IO] {
     case req @ POST -> Root / "openBets" =>
       val result = for {
         openRequest <- req.as[OpenBetsRequest]
-        _           <- tableManager.startGame(openRequest.tid)
+        result      <- tableManager.startGame(openRequest.tid)
+        _           <- dispatcher.dispatchAll(result.events)
         response    <- Ok()
       } yield response
 
@@ -42,7 +43,8 @@ case class Routes(tableManager: TableManager) extends Http4sDsl[IO] {
     case req @ POST -> Root / "setResult" =>
       val result = for {
         resultRequest <- req.as[SetResultRequest]
-        _             <- tableManager.setResult(resultRequest.tid, resultRequest.result)
+        result        <- tableManager.setResult(resultRequest.tid, resultRequest.result)
+        _             <- dispatcher.dispatchAll(result.events)
         response      <- Ok()
       } yield response
 

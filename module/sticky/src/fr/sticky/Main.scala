@@ -2,8 +2,8 @@ package fr.sticky
 
 import cats.effect._
 import cr.pulsar.{Pulsar => PulsarClient}
-import fr.http.HttpServer
-import fr.pulsar.Pulsar
+import fr.adapter.http.HttpServer
+import fr.adapter.pulsar.Pulsar
 import org.http4s.HttpRoutes
 import org.http4s.server.websocket.WebSocketBuilder2
 

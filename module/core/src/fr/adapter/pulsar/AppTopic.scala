@@ -1,4 +1,4 @@
-package fr.pulsar
+package fr.adapter.pulsar
 
 import cr.pulsar.{Subscription, Topic}
 import cr.pulsar.Topic.Type
@@ -34,14 +34,14 @@ object AppTopic {
     def make: Topic.Single = forSticky(name, `type`)
   }
 
-  case object UserTable extends AppTopic {
-    val name: String       = s"user-table"
+  case object UserTableAction extends AppTopic {
+    val name: String       = s"user-table-action"
     val `type`: Type       = Type.NonPersistent
     def make: Topic.Single = forHandler(name, `type`)
   }
 
-  case object TableUser extends AppTopic { // todo naming
-    val name: String       = s"table-user"
+  case object TableEvent extends AppTopic {
+    val name: String       = s"table-event"
     val `type`: Type       = Type.NonPersistent
     def make: Topic.Single = forHandler(name, `type`)
   }

@@ -4,10 +4,10 @@ import cats.effect.IO
 import cats.effect.kernel.Resource
 import cats.syntax.all._
 import cr.pulsar.{Consumer, Subscription, Pulsar => PulsarClient}
-import fr.domain.Event.OutgoingUserEvent
+import fr.adapter.pulsar.LoggingConsumer
+import fr.domain.user.UserEvent
 import fr.domain.UserId
-import fr.pulsar.AppTopic.ServerToClient
-import fr.pulsar.LoggingConsumer
+import fr.adapter.pulsar.AppTopic.ServerToClient
 import fr.sticky.Routes.UserIdQueryParam
 import org.http4s._
 import org.http4s.dsl.Http4sDsl
@@ -17,14 +17,14 @@ import org.http4s.server.websocket.WebSocketBuilder2
 import java.util.UUID
 
 case class Routes(wsHandler: WebSocketHandler, client: PulsarClient.Underlying, builder: WebSocketBuilder2[IO]) extends Http4sDsl[IO] {
-  private def consume(uid: UserId): Resource[IO, Consumer[IO, OutgoingUserEvent]] = {
+  private def consume(uid: UserId): Resource[IO, Consumer[IO, UserEvent]] = {
     val subscription = Subscription.Builder
       .withName(Subscription.Name(s"outgoing-${uid.show}"))
       .withType(Subscription.Type.Failover)
       .withMode(Subscription.Mode.NonDurable)
       .build
 
-    LoggingConsumer.make[OutgoingUserEvent](client, ServerToClient(uid.value.toString).make, subscription).onError {
+    LoggingConsumer.make[UserEvent](client, ServerToClient(uid.value.toString).make, subscription).onError {
       case ex =>
         Resource.eval(IO.println(s"Error while consuming messages for uid: ${uid.show}: ${ex.getMessage}"))
     }

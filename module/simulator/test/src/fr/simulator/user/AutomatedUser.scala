@@ -2,7 +2,9 @@ package fr.simulator.user
 
 import cats.effect.{IO, Ref}
 import fr.domain.Event.{OutgoingUserEvent => OUE}
-import fr.domain.{Bet, BetId, GameId, TableId, UserAction, UserId}
+import fr.domain.game.roulette.Bet
+import fr.domain.user.UserInput
+import fr.domain.{BetId, GameId, TableId, UserId}
 import fr.simulator.user.AutomatedUser.BetState
 import fr.simulator.{HttpClient, WebSocketClient}
 
@@ -14,10 +16,10 @@ class AutomatedUser(uid: UserId, client: HttpClient) {
   def play(tid: TableId): IO[Unit] = {
     def joinTable(user: WebSocketClient): IO[Unit] =
       for {
-        _ <- user.send(UserAction.StateRequested)
-        _ <- user.expect[OUE.StateResponse]
+        _ <- user.send(UserInput.RequestState)
+        _ <- user.expect[OUE.StateBroadcasted]
 
-        _ <- user.send(UserAction.JoinedTable(tid))
+        _ <- user.send(UserInput.JoinTable(tid))
         _ <- user.expect[OUE.UserJoinedTable]
       } yield ()
 
@@ -30,7 +32,7 @@ class AutomatedUser(uid: UserId, client: HttpClient) {
           bet <- randomBet
           randomDelay = (Random.nextInt(1000) + 150).millis
           _ <- IO.sleep(randomDelay)
-          _ <- user.send(UserAction.BetPlaced(bet, tid, gid))
+          _ <- user.send(UserInput.PlaceBet(bet, tid, gid))
 //          amount <- IO(Random.nextInt(1000))
           _ <- placeBets(user, betState, balance)
         } yield ()

@@ -1,4 +1,4 @@
-package fr.redis
+package fr.adapter.redis
 
 import ciris.ConfigDecoder
 import io.estatico.newtype.macros.newtype
