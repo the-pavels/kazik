@@ -21,12 +21,15 @@ Module Responsibilities:
 
 The **sticky** module handles the WebSocket connections for real-time communication. It uses a pipeline that decodes
 incoming WebSocket frames into user actions and encodes outgoing events.
+
 The **table-handler** processes events related to table operations (e.g., placing bets, joining/leaving tables) and manages
 table state. It groups events by table then processes them concurrently while ensuring that events for each table are
 handled in order if needed.
+
 The **user-handler** processes user-level events such as socket connections, placing bets, and receiving updates. It
 combines events from both user actions and table events to update user state and broadcast events back to the client.
 Concurrency and Error Handling:
+
 The system processes messages concurrently (using operators like parEvalMap), which enables it to handle bursts of
 activity. Each processing stream includes error handling—acknowledging successfully processed messages while nacking (
 negatively acknowledging) those that fail, ensuring partial success and resilience.
