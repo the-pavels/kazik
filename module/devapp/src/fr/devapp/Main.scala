@@ -1,12 +1,9 @@
 package fr.devapp
 
-import cats.effect.IO
-import cats.effect.IOApp
-import cats.effect.Resource
+import cats.effect.{IO, IOApp, Resource}
 import cats.implicits.toSemigroupKOps
 import dev.profunktor.redis4cats.connection.RedisClient
 import dev.profunktor.redis4cats.effect.Log.NoOp.instance
-import doobie.util.transactor.Transactor
 import fr.adapter.http.HttpServer
 import fr.adapter.pulsar.Pulsar
 import org.http4s.HttpApp
@@ -23,16 +20,9 @@ object Main extends IOApp.Simple {
       cfg    <- Resource.eval(Config.load)
       pulsar <- Pulsar.default(cfg.pulsarURL)
       redis  <- RedisClient[IO].from(cfg.redisConfig.value)
-      transactor = Transactor.fromDriverManager[IO](
-        "org.postgresql.Driver",
-        cfg.postgresDb.url.value,
-        cfg.postgresDb.user.value,
-        cfg.postgresDb.password.value,
-        None
-      )
 
-      userEventProcessing              <- fr.user.UserHandlerApp.resource(transactor, pulsar, redis)
-      (tableEventProcessing, tableApi) <- fr.table.TableHandlerApp.resource(transactor, pulsar, redis)
+      userEventProcessing              <- fr.user.UserHandlerApp.resource(pulsar, redis)
+      (tableEventProcessing, tableApi) <- fr.table.TableHandlerApp.resource(pulsar, redis)
       stickyApi                        <- fr.sticky.StickyApp.resource(pulsar)
     } yield {
       val api: WebSocketBuilder2[IO] => HttpApp[IO] = (webSocketBuilder: WebSocketBuilder2[IO]) =>

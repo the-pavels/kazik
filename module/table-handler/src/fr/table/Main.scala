@@ -1,44 +1,40 @@
 package fr.table
 
 import cats.effect.{IO, IOApp, Resource}
-import cats.implicits.toShow
 import cr.pulsar.{Subscription, Pulsar => PulsarClient}
 import dev.profunktor.redis4cats.connection.RedisClient
 import dev.profunktor.redis4cats.effect.Log.NoOp.instance
-import doobie.util.transactor.Transactor
 import fr.adapter.http.HttpServer
 import fr.adapter.pulsar.{AppTopic, LoggingConsumer, LoggingProducer, Pulsar}
 import fr.adapter.redis.StateStorage
 import fr.domain.TableId
 import fr.domain.table.TableEvent.TableEventEnvelope
-import fr.domain.table.{TableState}
+import fr.domain.table.TableState
 import fr.domain.user.UserTableAction.UserTableActionEnvelope
+import fr.table.TableManager.Result
 import org.http4s.HttpRoutes
 
-import java.util.UUID
-import fr.table.TableManager.Result
-
 object TableHandlerApp {
-  def resource(transactor: Transactor[IO], pulsar: PulsarClient.Underlying, redis: RedisClient): Resource[IO, (fs2.Stream[IO, Unit], HttpRoutes[IO])] = {
-    val stateStorage = StateStorage.postgres[TableId, TableState, Result]("tables", transactor, TableState.empty)
-
-    val tableEventBroadcast = (e: TableEventEnvelope) => LoggingProducer.sharded[TableEventEnvelope](pulsar, AppTopic.TableEvent.make).use(_.send_(e))
-    val dispatcher          = Dispatcher.make(tableEventBroadcast)
-
-    val tableManager    = TableManager.make(stateStorage)
-    val incomingHandler = IncomingHandler.make(tableManager, dispatcher)
-
-    val subscription = Subscription.Builder
-      .withName(Subscription.Name(s"table-handler"))
-      .withType(Subscription.Type.KeyShared)
-      .withMode(Subscription.Mode.NonDurable)
-      .build
-
-    val routes = Routes(tableManager, dispatcher).routes
-
+  def resource(pulsar: PulsarClient.Underlying, redis: RedisClient): Resource[IO, (fs2.Stream[IO, Unit], HttpRoutes[IO])] = {
     for {
+      stateStorage <- StateStorage.redis[TableId, TableState, Result](redis, _.asKey, TableState.empty)
+
+      tableEventBroadcast = (e: TableEventEnvelope) => LoggingProducer.sharded[TableEventEnvelope](pulsar, AppTopic.TableEvent.make).use(_.send_(e))
+      dispatcher          = Dispatcher.make(tableEventBroadcast)
+
+      tableManager    = TableManager.make(stateStorage)
+      incomingHandler = IncomingHandler.make(tableManager, dispatcher)
+
+      subscription = Subscription.Builder
+        .withName(Subscription.Name(s"table-handler"))
+        .withType(Subscription.Type.KeyShared)
+        .withMode(Subscription.Mode.NonDurable)
+        .build
+
+      routes = Routes(tableManager, dispatcher).routes
+
       userEventConsumer <- LoggingConsumer.make[UserTableActionEnvelope](pulsar, AppTopic.UserTableAction.make, subscription)
-      userEventsProcessor = userEventConsumer.subscribe.parEvalMap(8) { msg =>
+      userEventsProcessor = userEventConsumer.subscribe.parEvalMap(12) { msg =>
         incomingHandler.handleUser(msg.payload).onError { e =>
           IO.println(s"Couldn't handle ${msg.payload}: ${e.getMessage}") *> userEventConsumer.nack(msg.id)
         } <* userEventConsumer.ack(msg.id)
@@ -50,17 +46,10 @@ object TableHandlerApp {
 object Main extends IOApp.Simple {
   def run: IO[Unit] = {
     val app = for {
-      cfg    <- Resource.eval(Config.load)
-      pulsar <- Pulsar.default(cfg.pulsarURL)
-      redis  <- RedisClient[IO].from(cfg.redisConfig.value)
-      transactor = Transactor.fromDriverManager[IO](
-        "org.postgresql.Driver",
-        cfg.postgresDb.url.value,
-        cfg.postgresDb.user.value,
-        cfg.postgresDb.password.value,
-        None
-      )
-      (stream, httpApi) <- TableHandlerApp.resource(transactor, pulsar, redis)
+      cfg               <- Resource.eval(Config.load)
+      pulsar            <- Pulsar.default(cfg.pulsarURL)
+      redis             <- RedisClient[IO].from(cfg.redisConfig.value)
+      (stream, httpApi) <- TableHandlerApp.resource(pulsar, redis)
     } yield stream.drain -> httpApi
 
     app.use {

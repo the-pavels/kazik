@@ -1,16 +1,15 @@
 package fr.adapter.redis
 
-import cats.Show
 import cats.effect.IO
 import cats.effect.kernel.Resource
-import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import dev.profunktor.redis4cats.Redis
 import dev.profunktor.redis4cats.connection.RedisClient
 import dev.profunktor.redis4cats.data.RedisCodec
 import dev.profunktor.redis4cats.effect.Log.NoOp.instance
 import dev.profunktor.redis4cats.effects.ScriptOutputType
-import doobie.Transactor
+import doobie._
+import doobie.implicits._
 import io.circe.Codec
 import io.circe.parser.{decode => jsonDecode}
 import io.circe.syntax.EncoderOps
@@ -18,20 +17,11 @@ import io.circe.syntax.EncoderOps
 import scala.concurrent.duration._
 import scala.util.Random
 import scala.util.control.NonFatal
-import cats.syntax.all._
-import cats.syntax.show._
-import doobie._
-import doobie.implicits._
-import doobie.postgres.implicits._
-import doobie.postgres.circe.jsonb.implicits._
-
-import java.time.Instant
 
 sealed trait StateStorage[K, S, R] {
   def get(key: K): IO[S]
   def put(key: K, state: S): IO[Unit]
   def updateState(key: K)(f: S => (S, R)): IO[R]
-//  def updateStateF(key: K)(f: S => IO[S]): IO[S]
 }
 
 object StateStorage {
@@ -59,73 +49,69 @@ object StateStorage {
 
   final val CAS_SCRIPT_NIL_MARKER = "__EXPECT_NIL__"
 
-//  def redis[K, S: Codec, R](client: RedisClient, mkKey: K => String, default: K => S): Resource[IO, StateStorage[K, S, R]] =
-//    for {
-//      redisDefault  <- Redis[IO].fromClient(client, RedisCodec.Utf8)
-//      casScriptSha1 <- Resource.eval(redisDefault.scriptLoad(CAS_SCRIPT_CONTENT))
-//      _             <- Resource.eval(IO.println(s"Loaded CAS Lua script with SHA1: $casScriptSha1")) // Optional: Log success
-//    } yield new StateStorage[K, S, R] {
-//      override def get(key: K): IO[S] =
-//        redisDefault
-//          .get(mkKey(key))
-//          .map(_.flatMap(jsonDecode[S](_).getOrElse(default(key))))
-//
-//      override def put(key: K, state: S): IO[Unit] =
-//        redisDefault.set(mkKey(key), state.asJson.noSpaces).void
-//
-//      override def updateState(key: K)(f: S => (S, R)): IO[R] = ???
-//        updateStateF(key)(s => IO.pure(f(s)))
+  def redis[K, S: Codec, R: Codec](client: RedisClient, mkKey: K => String, default: K => S): Resource[IO, StateStorage[K, S, R]] =
+    for {
+      redisDefault  <- Redis[IO].fromClient(client, RedisCodec.Utf8)
+      casScriptSha1 <- Resource.eval(redisDefault.scriptLoad(CAS_SCRIPT_CONTENT))
+      _             <- Resource.eval(IO.println(s"Loaded CAS Lua script with SHA1: $casScriptSha1")) // Optional: Log success
+    } yield new StateStorage[K, S, R] {
+      override def get(key: K): IO[S] =
+        redisDefault
+          .get(mkKey(key))
+          .map(_.flatMap(jsonDecode[S](_).toOption).getOrElse(default(key)))
 
-//      override def updateStateF(key: K)(f: S => IO[S]): IO[S] = {
-//        val k          = mkKey(key)
-//        val maxRetries = 1000
-//
-//        def attempt(tries: Int): IO[S] = {
-//          if (tries >= maxRetries) {
-//            IO.raiseError(new RuntimeException(s"Max Lua CAS retries ($maxRetries) reached for key $k"))
-//          } else {
-//            // 1. Read current value (outside transaction/Lua)
-//            redisDefault
-//              .get(k)
-//              .flatMap { currentJsonOpt =>
-//                val currentState = currentJsonOpt
-//                  .flatMap(jsonDecode[S](_).toOption)
-//                  .getOrElse(default(key))
-//                val expectedJson = currentJsonOpt.getOrElse(CAS_SCRIPT_NIL_MARKER)
-//
-//                // 2. Compute new state using the user function
-//                f(currentState).flatMap { updatedState =>
-//                  val updatedJson = updatedState.asJson.noSpaces
-//
-//                  // 3. Attempt atomic CAS using evalSha with the pre-loaded script digest
-//                  redisDefault
-//                    .evalSha(
-//                      casScriptSha1,
-//                      output = ScriptOutputType.Integer[String],
-//                      keys = List(k),
-//                      values = List(expectedJson, updatedJson)
-//                    )
-//                    .flatMap {
-//                      case 1L =>
-//                        IO.pure(updatedState)
-//                      case 0L =>
-//                        IO(Random.nextInt(10)).flatMap(s => IO.sleep(s.millis)) *> attempt(tries + 1)
-//                      case other =>
-//                        IO.raiseError(new RuntimeException(s"Unexpected Lua script return value: $other for key $k"))
-//                    }
-//                }
-//              }
-//              .recoverWith {
-//                case NonFatal(e) =>
-//                  IO.println(s"WARN: Error during update attempt $tries for key $k: ${e.getMessage}") *>
-//                    IO.raiseError(new RuntimeException(s"Error during update attempt for key $k after $tries tries: ${e.getMessage}", e))
-//              }
-//          }
-//        }
-//
-//        attempt(tries = 0)
-//      }
-//    }
+      override def put(key: K, state: S): IO[Unit] =
+        redisDefault.set(mkKey(key), state.asJson.noSpaces).void
+
+      override def updateState(key: K)(f: S => (S, R)): IO[R] = {
+        val k          = mkKey(key)
+        val maxRetries = 1000
+
+        def attempt(tries: Int): IO[R] = {
+          if (tries >= maxRetries) {
+            IO.raiseError(new RuntimeException(s"Max Lua CAS retries ($maxRetries) reached for key $k"))
+          } else {
+            // 1. Read current value (outside transaction/Lua)
+            redisDefault
+              .get(k)
+              .flatMap { currentJsonOpt =>
+                val currentState = currentJsonOpt
+                  .flatMap(jsonDecode[S](_).toOption)
+                  .getOrElse(default(key))
+                val expectedJson = currentJsonOpt.getOrElse(CAS_SCRIPT_NIL_MARKER)
+
+                // 2. Compute new state using the user function
+                val (updatedState, result) = f(currentState)
+                val updatedJson            = updatedState.asJson.noSpaces
+
+                // 3. Attempt atomic CAS using evalSha with the pre-loaded script digest
+                redisDefault
+                  .evalSha(
+                    casScriptSha1,
+                    output = ScriptOutputType.Integer[String],
+                    keys = List(k),
+                    values = List(expectedJson, updatedJson)
+                  )
+                  .flatMap {
+                    case 1L =>
+                      IO.pure(result)
+                    case 0L =>
+                      IO(Random.nextInt(10)).flatMap(s => IO.sleep(s.millis)) *> attempt(tries + 1)
+                    case other =>
+                      IO.raiseError(new RuntimeException(s"Unexpected Lua script return value: $other for key $k"))
+                  }
+              }
+              .recoverWith {
+                case NonFatal(e) =>
+                  IO.println(s"WARN: Error during update attempt $tries for key $k: ${e.getMessage}") *>
+                    IO.raiseError(new RuntimeException(s"Error during update attempt for key $k after $tries tries: ${e.getMessage}", e))
+              }
+          }
+        }
+
+        attempt(tries = 0)
+      }
+    }
 
   def postgres[K: Meta, S: Meta, R](table: String, transactor: Transactor[IO], default: K => S): StateStorage[K, S, R] = new StateStorage[K, S, R] {
     private def _get(key: K): ConnectionIO[Option[S]] = {
