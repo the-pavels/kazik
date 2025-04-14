@@ -21,11 +21,9 @@ class AutomatedUser(uid: UserId, client: HttpClient) {
 
         _ <- user.send(UserInput.JoinTable(tid))
         _ <- user.expect[UserEvent.UsersJoinedTable]
-        ts = Instant.now().toString
-        _ <- IO.println(s"[$ts] [$uid] OLOLO Joined table $tid")
       } yield e.state
 
-    def randomBet: IO[Bet] = IO(Bet(BetId(UUID.randomUUID()), Random.nextInt(37), 1))
+    def randomBet: IO[Bet] = IO(Bet(BetId(UUID.randomUUID()), number = Random.nextInt(37), amount = 1))
 
     def placeBets(user: WebSocketClient, betState: Ref[IO, BetState], expected: Ref[IO, ExpectedUserState]): IO[Unit] = betState.get.flatMap {
       case BetState.Closed => IO.sleep(500.millis) *> placeBets(user, betState, expected)
@@ -93,7 +91,7 @@ class AutomatedUser(uid: UserId, client: HttpClient) {
         user.addHandler {
           case e: UserEvent.BetAccepted =>
             bets.update(_ :+ e.bet.number) *>
-              expected.update(s => s.copy(balance = s.balance - e.bet.amount, blockedBalance = s.blockedBalance - e.bet.amount)) *>
+              expected.update(s => s.copy(blockedBalance = s.blockedBalance - e.bet.amount)) *>
               IO.println(s"[$uid] Bet accepted: ${e.bet.number}")
           case e: UserEvent.BetRejected =>
             expected.update(s => s.copy(balance = s.balance + e.bet.amount, blockedBalance = s.blockedBalance - e.bet.amount)) *>
