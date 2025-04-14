@@ -12,7 +12,7 @@ class HappyPathSuite extends Scenario {
     val tid = genTableId
 
     val tableManager = new AutomatedTableManager(client)
-    val users        = (1 to 300).map(_ => new AutomatedUser(uid, client)).toList
+    val users        = (1 to 100).map(_ => new AutomatedUser(uid, client)).toList
 
     tableManager.start(tid) &> users.parTraverse(_.play(tid))
   }

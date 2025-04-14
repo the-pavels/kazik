@@ -8,8 +8,6 @@ import fr.domain.game.roulette.{Bet, Game}
 import fr.domain.table.{TableState, TableEvent => TE}
 import fr.domain.{GameId, TableId, UserId}
 import fr.table.TableManager.Result
-import io.circe.Codec
-import io.circe.generic.semiauto.deriveCodec
 
 import java.util.UUID
 
