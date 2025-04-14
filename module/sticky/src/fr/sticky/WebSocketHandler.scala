@@ -4,16 +4,17 @@ import cats.effect.IO
 import cats.syntax.all._
 import fr.domain.{EventId, UserId}
 import fr.domain.user.UserAction.UserActionReceived
-import fr.domain.user.{UserEvent, UserInput}
+import fr.domain.user.{UserInput}
 import fr.sticky.WebSocketHandler.WebSocketFlow
 import fs2.{Pipe, Stream}
 import io.circe.syntax.EncoderOps
 import io.circe.{Encoder, Json, parser}
 import org.http4s.websocket.WebSocketFrame
 import org.http4s.websocket.WebSocketFrame.{Close, Text}
+import fr.domain.user.UserEvent.UserEventEnvelope
 
 trait WebSocketHandler {
-  def build(uid: UserId, outgoing: fs2.Stream[IO, UserEvent]): WebSocketFlow
+  def build(uid: UserId, outgoing: fs2.Stream[IO, UserEventEnvelope]): WebSocketFlow
 }
 
 object WebSocketHandler {
@@ -32,8 +33,11 @@ object WebSocketHandler {
         case wsf          => IO.raiseError(new IllegalArgumentException(s"Unknown type: ${wsf.toString}"))
       }
 
-      def encode: UserEvent => IO[WebSocketFrame] =
-        out => IO.pure(Text(out.asJson.noSpaces))
+      def encode: UserEventEnvelope => IO[WebSocketFrame] = { out =>
+        val event = out.event.asJson
+        IO.println(Json.obj("event" -> event).noSpaces) *>
+          IO.pure(Text(event.noSpaces))
+      }
 
       def processIncoming(uid: UserId)(in: UserInput): IO[Unit] =
         for {
@@ -42,7 +46,7 @@ object WebSocketHandler {
           _   <- dispatcher.dispatch(UserActionReceived(EventId(eid), uid, in, ts))
         } yield ()
 
-      def build(uid: UserId, outgoing: fs2.Stream[IO, UserEvent]): WebSocketFlow = {
+      def build(uid: UserId, outgoing: fs2.Stream[IO, UserEventEnvelope]): WebSocketFlow = {
         val send: Stream[IO, WebSocketFrame] =
           outgoing
             .through(log(Json.obj("flow" -> "ws-out".asJson, "uid" -> uid.show.asJson)))

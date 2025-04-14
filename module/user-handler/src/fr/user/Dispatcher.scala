@@ -18,7 +18,7 @@ object Dispatcher {
   def make(userBroadcast: UserOutgoingEventBroadcast, userTableBroadcast: UserTableEventBroadcast): Dispatcher = new Dispatcher {
     private def newEvent = (IO.randomUUID.map(EventId(_)), IO.realTimeInstant)
 
-    def dispatch(r: Result): IO[Unit] =
+    def dispatch(r: Result): IO[Unit] = {
       r.actions.traverse { action =>
         newEvent.flatMapN {
           case (eid, ts) => userTableBroadcast(UserTableActionEnvelope(eid, r.state.id, action, ts))
@@ -28,5 +28,6 @@ object Dispatcher {
           case (eid, ts) => userBroadcast(r.state.id)(UserEventEnvelope(eid, r.state.id, event, ts))
         }
       }.void
+    }
   }
 }

@@ -12,15 +12,6 @@ class AutomatedTableManager(client: HttpClient) {
   private val tableManager = TableManagerClient(client)
   private val killSwitch   = Ref.unsafe[IO, Boolean](true)
 
-  def createTable(tid: TableId): IO[Unit] = {
-    for {
-      _ <- tableManager.createTable(tid)
-      _ <- eventually(10.seconds) {
-        tableManager.getTables.map(_.contains(tid))
-      }
-    } yield ()
-  }
-
   def stop: IO[Unit] = killSwitch.set(false)
 
   def start(tid: TableId): IO[Unit] = {
@@ -44,5 +35,4 @@ class AutomatedTableManager(client: HttpClient) {
 
     run(1)
   }
-
 }

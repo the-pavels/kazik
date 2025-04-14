@@ -7,8 +7,10 @@ import io.circe._
 import io.estatico.newtype.Coercible
 import io.estatico.newtype.macros.newtype
 import io.estatico.newtype.ops._
+import doobie.postgres.implicits._
 
 import java.util.UUID
+import doobie.util.meta.Meta
 
 package object domain {
   implicit class ConfigOps[F[_], A](cv: ConfigValue[F, A]) {
@@ -40,6 +42,7 @@ package object domain {
     implicit val keyDecoder: KeyDecoder[UserId] = KeyDecoder.decodeKeyString.map(s => UserId(UUID.fromString(s)))
     implicit val eqv: Eq[UserId]                = Eq.fromUniversalEquals
     implicit val show: Show[UserId]             = Show.fromToString
+    implicit val meta: Meta[UserId]             = Meta[UUID].imap[UserId](UserId(_))(_.value)
   }
 
   @newtype
@@ -64,6 +67,10 @@ package object domain {
       Decoder.decodeString.map(s => TableId(UUID.fromString(s)))
     implicit val eqv: Eq[TableId]    = Eq.fromUniversalEquals
     implicit val show: Show[TableId] = Show.fromToString
+    implicit val meta: Meta[TableId] = Meta[UUID].imap[TableId](TableId(_))(_.value)
+    implicit val keyEncoder: KeyEncoder[TableId] =
+      KeyEncoder.encodeKeyString.contramap[TableId](_.toString())
+    implicit val keyDecoder: KeyDecoder[TableId] = KeyDecoder.decodeKeyString.map(s => TableId(UUID.fromString(s)))
   }
   @newtype
   case class GameId(value: UUID)

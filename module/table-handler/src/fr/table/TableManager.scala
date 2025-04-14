@@ -28,7 +28,7 @@ object TableManager {
   case class Result(state: TableState, events: List[TE] = List.empty)
 
   def make(stateStorage: StateStorage[TableId, TableState, Result]): TableManager = new TableManager {
-    override def getUsers(tid: TableId): IO[Set[UserId]] = stateStorage.get(tid).map(_.map(_.users).getOrElse(Set.empty))
+    override def getUsers(tid: TableId): IO[Set[UserId]] = stateStorage.get(tid).map(_.users)
     override def create(tid: TableId): IO[Unit]          = stateStorage.put(tid, TableState(tid, Set.empty, None))
     override def closeBets(tid: TableId): IO[Result] =
       stateStorage.updateState(tid) {
@@ -70,7 +70,7 @@ object TableManager {
       stateStorage
         .updateState(tid) { s: TableState =>
           val updatedState = s.copy(users = s.users + uid)
-          val events = s.users.toList.map { sittingUser =>
+          val events = updatedState.users.toList.map { sittingUser =>
             TE.JoinedTable(tid, sittingUser, List(uid))
           }
 

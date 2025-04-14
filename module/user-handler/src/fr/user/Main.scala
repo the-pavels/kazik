@@ -9,7 +9,7 @@ import doobie.util.transactor.Transactor
 import fr.adapter.pulsar.{AppTopic, LoggingConsumer, LoggingProducer, Pulsar}
 import fr.adapter.redis.StateStorage
 import fr.domain.UserId
-import fr.domain.table.TableEvent
+import fr.domain.table.TableEvent.TableEventEnvelope
 import fr.domain.user.UserEvent.UserEventEnvelope
 import fr.domain.user.UserTableAction.UserTableActionEnvelope
 import fr.domain.user.{UserAction, UserState}
@@ -22,32 +22,40 @@ object UserHandlerApp {
     val stateStorage = StateStorage.postgres[UserId, UserState, Result]("users", transactor, UserState.empty)
 
     val userBroadcast = (uid: UserId) =>
-      (e: UserEventEnvelope) => LoggingProducer.default[UserEventEnvelope](pulsar, AppTopic.ServerToClient(uid.value.show).make).use(_.send_(e))
+      (e: UserEventEnvelope) => LoggingProducer.default[UserEventEnvelope](pulsar, AppTopic.UserEvent(uid.value.show).make).use(_.send_(e))
     val tableBroadcast = (e: UserTableActionEnvelope) => LoggingProducer.sharded[UserTableActionEnvelope](pulsar, AppTopic.UserTableAction.make).use(_.send_(e))
     val dispatcher     = Dispatcher.make(userBroadcast, tableBroadcast)
 
     val userManager     = UserManager.make(stateStorage)
     val incomingHandler = IncomingHandler.make(userManager)
 
-    val subscription1 = Subscription.Builder
-      .withName(Subscription.Name(s"user-handler-${UUID.randomUUID().show}"))
-      .withType(Subscription.Type.Failover) // TODO
+    val userActionSubscription = Subscription.Builder
+      .withName(Subscription.Name(s"user-handler"))
+      .withType(Subscription.Type.KeyShared)
       .withMode(Subscription.Mode.NonDurable)
       .build
 
-    val subscription2 = Subscription.Builder // todo name
-      .withName(Subscription.Name(s"table-user-handler-${UUID.randomUUID().show}"))
-      .withType(Subscription.Type.Failover) // TODO
+    val tableEventSubscription = Subscription.Builder
+      .withName(Subscription.Name(s"table-event-handler"))
+      .withType(Subscription.Type.KeyShared)
       .withMode(Subscription.Mode.NonDurable)
       .build
 
     for {
-      userEvents  <- LoggingConsumer.make[UserAction](pulsar, AppTopic.ClientToServer.make, subscription1)
-      tableEvents <- LoggingConsumer.make[TableEvent](pulsar, AppTopic.TableEvent.make, subscription2)
+      userActionConsumer <- LoggingConsumer.make[UserAction](pulsar, AppTopic.UserAction.make, userActionSubscription)
+      tableEventConsumer <- LoggingConsumer.make[TableEventEnvelope](pulsar, AppTopic.TableEvent.make, tableEventSubscription)
 
-      userActionProcessor = userEvents.process(incomingHandler.fromUser)
-      tableEventProcessor = tableEvents.process(incomingHandler.fromTable)
-    } yield userActionProcessor.concurrently(tableEventProcessor).evalMap(dispatcher.dispatch)
+      userActionProcessor = userActionConsumer.subscribe.parEvalMap(8) { msg =>
+        incomingHandler.fromUser(msg.payload).onError { e =>
+          IO.println(s"Couldn't handle ${msg.payload}: ${e.getMessage}") *> userActionConsumer.nack(msg.id)
+        } <* userActionConsumer.ack(msg.id)
+      }
+      tableEventProcessor = tableEventConsumer.subscribe.parEvalMap(8) { msg =>
+        incomingHandler.fromTable(msg.payload).onError { e =>
+          IO.println(s"Couldn't handle ${msg.payload}: ${e.getMessage}") *> tableEventConsumer.nack(msg.id)
+        } <* tableEventConsumer.ack(msg.id)
+      }
+    } yield fs2.Stream(userActionProcessor, tableEventProcessor).parJoinUnbounded.evalMap(dispatcher.dispatch)
   }
 }
 

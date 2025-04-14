@@ -22,14 +22,14 @@ object TableHandlerApp {
   def resource(transactor: Transactor[IO], pulsar: PulsarClient.Underlying, redis: RedisClient): Resource[IO, (fs2.Stream[IO, Unit], HttpRoutes[IO])] = {
     val stateStorage = StateStorage.postgres[TableId, TableState, Result]("tables", transactor, TableState.empty)
 
-    val userBroadcast = (e: TableEventEnvelope) => LoggingProducer.sharded[TableEventEnvelope](pulsar, AppTopic.TableEvent.make).use(_.send_(e))
-    val dispatcher    = Dispatcher.make(userBroadcast)
+    val tableEventBroadcast = (e: TableEventEnvelope) => LoggingProducer.sharded[TableEventEnvelope](pulsar, AppTopic.TableEvent.make).use(_.send_(e))
+    val dispatcher          = Dispatcher.make(tableEventBroadcast)
 
     val tableManager    = TableManager.make(stateStorage)
     val incomingHandler = IncomingHandler.make(tableManager, dispatcher)
 
     val subscription = Subscription.Builder
-      .withName(Subscription.Name(s"table-handler-${UUID.randomUUID().show}"))
+      .withName(Subscription.Name(s"table-handler"))
       .withType(Subscription.Type.KeyShared)
       .withMode(Subscription.Mode.NonDurable)
       .build
@@ -37,8 +37,12 @@ object TableHandlerApp {
     val routes = Routes(tableManager, dispatcher).routes
 
     for {
-      userEvents <- LoggingConsumer.make[UserTableActionEnvelope](pulsar, AppTopic.UserTableAction.make, subscription)
-      userEventsProcessor = userEvents.process(incomingHandler.handleUser)
+      userEventConsumer <- LoggingConsumer.make[UserTableActionEnvelope](pulsar, AppTopic.UserTableAction.make, subscription)
+      userEventsProcessor = userEventConsumer.subscribe.parEvalMap(8) { msg =>
+        incomingHandler.handleUser(msg.payload).onError { e =>
+          IO.println(s"Couldn't handle ${msg.payload}: ${e.getMessage}") *> userEventConsumer.nack(msg.id)
+        } <* userEventConsumer.ack(msg.id)
+      }
     } yield (userEventsProcessor, routes)
   }
 }

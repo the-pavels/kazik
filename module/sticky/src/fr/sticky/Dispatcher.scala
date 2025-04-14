@@ -12,7 +12,7 @@ trait Dispatcher {
 
 object Dispatcher {
   def make(client: PulsarClient.Underlying): Resource[IO, Dispatcher] =
-    LoggingProducer.sharded[UserAction](client, AppTopic.ClientToServer.make).map { producer =>
+    LoggingProducer.sharded[UserAction](client, AppTopic.UserAction.make).map { producer =>
       new Dispatcher {
         override def dispatch(e: UserAction): IO[Unit] = producer.send_(e)
       }

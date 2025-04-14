@@ -6,13 +6,6 @@ import fr.table.Routes.{CloseBetsRequest, CreateTableRequest, OpenBetsRequest, S
 import fr.simulator.HttpClient
 
 case class TableManagerClient(client: HttpClient) {
-  def getTables: IO[List[TableId]] =
-    for {
-      _        <- IO.println("Getting tables")
-      response <- client.get[List[TableId]](s"table/tables")
-      _        <- IO.println("Tables received")
-    } yield response
-
   def createTable(tid: TableId): IO[Unit] =
     for {
       _ <- IO.println(s"Creating table $tid")

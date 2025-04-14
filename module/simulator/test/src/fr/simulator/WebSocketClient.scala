@@ -3,12 +3,12 @@ package fr.simulator
 import cats.effect.IO
 import fr.domain.UserId
 import io.circe.syntax.EncoderOps
-
 import cats.effect.Ref
 import cats.effect.std.Queue
 import cats.syntax.all._
-import fr.domain.Event.{OutgoingUserEvent => OUE}
-import fr.domain.user.{UserInput => UA}
+import fr.domain.user.UserEvent
+import fr.domain.user.UserEvent.UserEventEnvelope
+import fr.domain.user.UserInput
 import io.circe.parser.{decode => jsonDecode}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -20,10 +20,11 @@ import scala.reflect.ClassTag
 
 trait WebSocketClient {
   def close: IO[Unit]
-  def addHandler(handler: OUE => IO[Unit]): IO[Unit]
-  def expect[T <: OUE: ClassTag]: IO[T]
+  def addHandler(handler: UserEvent => IO[Unit]): IO[Unit]
+  def expect[T <: UserEvent: ClassTag]: IO[T]
+  def expectEither[T1 <: UserEvent: ClassTag, T2 <: UserEvent: ClassTag](andThen: Either[T1, T2] => IO[Unit]): IO[Unit]
   def listenEvents: IO[Unit]
-  def send(msg: UA): IO[Unit]
+  def send(msg: UserInput): IO[Unit]
 }
 
 object WebSocketClient {
@@ -31,13 +32,13 @@ object WebSocketClient {
   val maxRetries                    = 100
 
   def make(uid: UserId, ws: WebSocket[IO]): IO[WebSocketClient] =
-    (Queue.unbounded[IO, OUE], Ref.of[IO, List[OUE => IO[Unit]]](List.empty)).mapN {
+    (Queue.unbounded[IO, UserEvent], Ref.of[IO, List[UserEvent => IO[Unit]]](List.empty)).mapN {
       case (queue, handlersRef) =>
         new WebSocketClient {
           private val logger: SelfAwareStructuredLogger[IO] =
             Slf4jLogger.getLoggerFromName[IO](getClass.getSimpleName)
 
-          def addHandler(handler: OUE => IO[Unit]): IO[Unit] =
+          def addHandler(handler: UserEvent => IO[Unit]): IO[Unit] =
             handlersRef.update(_ :+ handler)
 
           def raceTimeout[T: ClassTag](
@@ -53,7 +54,7 @@ object WebSocketClient {
 
           def expectedClass[T: ClassTag]: String = implicitly[ClassTag[T]].runtimeClass.getSimpleName
 
-          def expect[T <: OUE: ClassTag]: IO[T] = {
+          def expect[T <: UserEvent: ClassTag]: IO[T] = {
             def parseIncoming(retries: Int): IO[T] =
               queue.take
                 .flatMap {
@@ -73,7 +74,7 @@ object WebSocketClient {
             raceTimeout(parseIncoming(0), ExpectTimeout)
           }
 
-          def send(msg: UA): IO[Unit] = {
+          def send(msg: UserInput): IO[Unit] = {
             val m = msg.asJson.noSpaces
             logger.info(s"OUT $uid <<< $m") *> ws.send(WebSocketFrame.text(m))
           }
@@ -90,14 +91,20 @@ object WebSocketClient {
           def listenEvents: IO[Unit] =
             ws.receiveText()
               .flatMap { msg =>
-                jsonDecode[OUE](msg)
+                jsonDecode[UserEvent](msg)
                   .liftTo[IO]
                   .flatTap(e => handlersRef.get.flatMap(_.traverse_(h => h(e))))
                   .flatMap(e => logger.info(s"IN $uid >>> $e") *> queue.offer(e))
                   .onError { e =>
-                    logger.error(s"$uid Couldn't parse incoming message. Expected OUE, input: $msg Ex: $e") *> IO(throw e)
+                    logger.error(s"$uid Couldn't parse incoming message. Expected UserEvent, input: $msg Ex: $e") *> IO(throw e)
                   }
               } >> listenEvents
+
+          override def expectEither[T1 <: UserEvent: ClassTag, T2 <: UserEvent: ClassTag](andThen: Either[T1, T2] => IO[Unit]): IO[Unit] =
+            for {
+              oneOf <- IO.race(expect[T1], expect[T2])
+              _     <- andThen(oneOf)
+            } yield ()
         }
     }
 }

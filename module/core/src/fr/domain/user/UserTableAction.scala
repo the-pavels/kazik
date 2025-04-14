@@ -18,7 +18,7 @@ object UserTableAction {
 
   implicit val codec: Codec[UserTableAction] = deriveCodec
 
-  case class UserTableActionEnvelope(id: EventId, uid: UserId, event: UserTableAction, ts: Instant)
+  case class UserTableActionEnvelope(id: EventId, uid: UserId, action: UserTableAction, ts: Instant)
   object UserTableActionEnvelope {
     implicit val codec: Codec[UserTableActionEnvelope] = deriveCodec
   }

@@ -13,9 +13,9 @@ trait Dispatcher {
 }
 
 object Dispatcher {
-  type UserBroadcast = TableEventEnvelope => IO[Unit]
+  type TableEventBroadcast = TableEventEnvelope => IO[Unit]
 
-  def make(userBroadcast: UserBroadcast): Dispatcher = new Dispatcher {
+  def make(tableEventBroadcast: TableEventBroadcast): Dispatcher = new Dispatcher {
     private def newEvent: (IO[EventId], IO[Instant]) = (IO.randomUUID.map(EventId(_)), IO.realTimeInstant)
 
     def dispatch(e: TableEvent): IO[Unit] =
@@ -23,7 +23,7 @@ object Dispatcher {
         .mapN {
           case (id, ts) => TableEventEnvelope(id, ts, e)
         }
-        .flatMap(userBroadcast)
+        .flatMap(tableEventBroadcast)
 
     override def dispatchAll(es: List[TableEvent]): IO[Unit] = es.traverse_(dispatch)
   }

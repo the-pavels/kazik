@@ -7,10 +7,10 @@ import fr.domain.UserId
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 
-case class UserState(id: UserId, balance: BigDecimal, blockedBalance: BigDecimal, tables: List[TableId])
+case class UserState(id: UserId, balance: BigDecimal, blockedBalance: Map[TableId, BigDecimal], tables: List[TableId])
 object UserState {
   implicit val codec: Codec[UserState] = deriveCodec
   implicit val meta: Meta[UserState]   = new Meta(pgDecoderGet, pgEncoderPut)
 
-  def empty(uid: UserId): UserState = UserState(uid, 100000, 0, List.empty)
+  def empty(uid: UserId): UserState = UserState(uid, 100000, Map.empty, List.empty)
 }

@@ -11,7 +11,7 @@ object DBConfigReader {
     (
       env(s"DB_HOST").as[PostgresHost].withDefault("localhost"),
       env(s"DB_PORT").as[PostgresPort].withDefault(5432),
-      env(s"DB_USER").as[PostgresUser].withDefault("cr"),
+      env(s"DB_USER").as[PostgresUser].withDefault("fr"),
       env(s"DB_PASSWORD").as[PostgresPassword].withDefault("mysecretpassword"),
       env(s"DB_MAX_CONNECTIONS").as[PostgresMaxConnections].withDefault(10),
       env(s"DB_USE_TLS").as[PostgresUseTLS].withDefault(false)

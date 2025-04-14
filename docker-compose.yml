@@ -57,6 +57,7 @@ services:
 
   postgres:
     image: timescale/timescaledb:2.10.3-pg13
+    container_name: fr-postgres
     ports:
       - 5432:5432
     environment:
@@ -67,7 +68,7 @@ services:
       - POSTGRES_HOST_AUTH_METHOD=md5
     command: postgres -c max_connections=200
     volumes:
-      - ./scala/db/dev/databases.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db/dev/databases.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U fr -d roulette" ]
       interval: 10s
@@ -76,6 +77,7 @@ services:
 
   flyway-roulette:
     image: flyway/flyway:10.3.0
+    container_name: fr-flyway-roulette
     command: migrate
     environment:
       - FLYWAY_USER=fr

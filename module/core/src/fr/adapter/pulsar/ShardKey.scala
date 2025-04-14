@@ -26,11 +26,11 @@ object ShardKey extends ShardKeySyntax {
 
   implicit val userTableActionShardKey: ShardKey[UserTableActionEnvelope] =
     new ShardKey[UserTableActionEnvelope] {
-      def shardKey: UserTableActionEnvelope => SK = e => shardBy(e.event.tid.value)
+      def shardKey: UserTableActionEnvelope => SK = e => shardBy(e.action.tid.value)
     }
 
   implicit val tableEvent: ShardKey[TableEventEnvelope] = new ShardKey[TableEventEnvelope] {
-    override def shardKey: TableEventEnvelope => SK = e => shardBy(e.event.uid.value)
+    override def shardKey: TableEventEnvelope => SK = e => shardBy(e.event.tid.value)
   }
 }
 
