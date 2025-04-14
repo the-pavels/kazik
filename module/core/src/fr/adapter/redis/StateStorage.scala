@@ -53,7 +53,6 @@ object StateStorage {
     for {
       redisDefault  <- Redis[IO].fromClient(client, RedisCodec.Utf8)
       casScriptSha1 <- Resource.eval(redisDefault.scriptLoad(CAS_SCRIPT_CONTENT))
-      _             <- Resource.eval(IO.println(s"Loaded CAS Lua script with SHA1: $casScriptSha1")) // Optional: Log success
     } yield new StateStorage[K, S, R] {
       override def get(key: K): IO[S] =
         redisDefault

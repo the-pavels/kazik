@@ -5,8 +5,6 @@ import fr.simulator.scenario.setup.Scenario._
 import fr.simulator.table.AutomatedTableManager
 import fr.simulator.user.AutomatedUser
 import cats.syntax.all._
-import fr.simulator.table.TableManagerClient
-import cats.effect.IO
 
 class HappyPathSuite extends Scenario {
   test("User can open WS connection") {
