@@ -6,8 +6,6 @@ import fr.domain.game.roulette.Bet
 import fr.domain.user.{UserEvent, UserState, UserTableAction}
 import fr.domain.{GameId, TableId, UserId}
 import fr.user.UserManager.Result
-import io.circe.Codec
-import io.circe.generic.semiauto.deriveCodec
 
 trait UserManager {
   def get(uid: UserId): IO[UserState]
@@ -22,8 +20,8 @@ trait UserManager {
   def betRejected(uid: UserId, tid: TableId, gid: GameId, bet: Bet): IO[Result]
   def betsClosed(uid: UserId, tid: TableId, gid: GameId): IO[Result]
   def betsOpened(uid: UserId, tid: TableId, gid: GameId): IO[Result]
-  def joinedTable(uid: UserId, tid: TableId, users: List[UserId]): IO[Result]
-  def leftTable(uid: UserId, tid: TableId, users: List[UserId]): IO[Result]
+  def joinedTable(uid: UserId, tid: TableId, users: Set[UserId]): IO[Result]
+  def leftTable(uid: UserId, tid: TableId, users: Set[UserId]): IO[Result]
   def gameFinished(uid: UserId, tid: TableId, gid: GameId, result: Int): IO[Result]
   def betWon(uid: UserId, tid: TableId, gid: GameId, amount: BigDecimal): IO[Result]
 }
@@ -87,11 +85,11 @@ object UserManager {
       Result(state, List(UserEvent.BetsOpened(tid, gid)))
     }
 
-    override def joinedTable(uid: UserId, tid: TableId, users: List[UserId]): IO[Result] = stateStorage.get(uid).map { state =>
+    override def joinedTable(uid: UserId, tid: TableId, users: Set[UserId]): IO[Result] = stateStorage.get(uid).map { state =>
       Result(state, List(UserEvent.UsersJoinedTable(users)))
     }
 
-    override def leftTable(uid: UserId, tid: TableId, users: List[UserId]): IO[Result] = stateStorage.get(uid).map { state =>
+    override def leftTable(uid: UserId, tid: TableId, users: Set[UserId]): IO[Result] = stateStorage.get(uid).map { state =>
       Result(state, List(UserEvent.UsersLeftTable(users)))
     }
 

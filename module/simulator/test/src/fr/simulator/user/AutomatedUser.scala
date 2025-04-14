@@ -7,7 +7,6 @@ import fr.domain.{BetId, GameId, TableId, UserId}
 import fr.simulator.user.AutomatedUser.{BetState, ExpectedUserState}
 import fr.simulator.{HttpClient, WebSocketClient}
 
-import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration.DurationInt
 import scala.util.Random

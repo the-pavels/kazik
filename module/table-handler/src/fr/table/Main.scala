@@ -1,6 +1,8 @@
 package fr.table
 
 import cats.effect.{IO, IOApp, Resource}
+import cats.implicits.{toFoldableOps, toTraverseOps}
+import cr.pulsar.Consumer.Message
 import cr.pulsar.{Subscription, Pulsar => PulsarClient}
 import dev.profunktor.redis4cats.connection.RedisClient
 import dev.profunktor.redis4cats.effect.Log.NoOp.instance
@@ -12,6 +14,7 @@ import fr.domain.table.TableEvent.TableEventEnvelope
 import fr.domain.table.TableState
 import fr.domain.user.UserTableAction.UserTableActionEnvelope
 import fr.table.TableManager.Result
+import org.apache.pulsar.client.api.MessageId
 import org.http4s.HttpRoutes
 
 object TableHandlerApp {
@@ -34,11 +37,23 @@ object TableHandlerApp {
       routes = Routes(tableManager, dispatcher).routes
 
       userEventConsumer <- LoggingConsumer.make[UserTableActionEnvelope](pulsar, AppTopic.UserTableAction.make, subscription)
-      userEventsProcessor = userEventConsumer.subscribe.parEvalMap(12) { msg =>
-        incomingHandler.handleUser(msg.payload).onError { e =>
-          IO.println(s"Couldn't handle ${msg.payload}: ${e.getMessage}") *> userEventConsumer.nack(msg.id)
-        } <* userEventConsumer.ack(msg.id)
-      }
+      userEventsProcessor = userEventConsumer.subscribe
+        .chunkN(32)
+        .parEvalMap(12) { msgChunk: fs2.Chunk[Message[UserTableActionEnvelope]] =>
+          val actionsChunk: fs2.Chunk[UserTableActionEnvelope] = msgChunk.map(_.payload)
+          val messageIds: List[MessageId]                      = msgChunk.map(_.id).toList
+
+          incomingHandler
+            .handle(actionsChunk.toList)
+            .attempt
+            .flatMap {
+              case Right(_) => messageIds.traverse_(userEventConsumer.ack)
+              case Left(err) =>
+                IO.println(s"Error processing chunk of ${messageIds.size} messages: ${err.getMessage}") *>
+                  messageIds.traverse_(userEventConsumer.nack) *>
+                  IO.raiseError(err)
+            }
+        }
     } yield (userEventsProcessor, routes)
   }
 }

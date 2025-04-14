@@ -19,8 +19,8 @@ object TableEvent {
   case class BetsClosed(tid: TableId, gid: GameId, uid: UserId)                 extends TableEvent
   case class BetWon(tid: TableId, gid: GameId, uid: UserId, amount: Int)        extends TableEvent
   case class GameFinished(tid: TableId, gid: GameId, uid: UserId, result: Int)  extends TableEvent
-  case class JoinedTable(tid: TableId, uid: UserId, users: List[UserId])        extends TableEvent
-  case class LeftTable(tid: TableId, uid: UserId, users: List[UserId])          extends TableEvent
+  case class JoinedTable(tid: TableId, uid: UserId, users: Set[UserId])         extends TableEvent
+  case class LeftTable(tid: TableId, uid: UserId, users: Set[UserId])           extends TableEvent
 
   implicit val codec: Codec[TableEvent] = deriveCodec
 

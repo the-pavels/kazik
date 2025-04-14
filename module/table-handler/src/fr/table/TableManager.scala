@@ -22,9 +22,13 @@ trait TableManager {
 
   def joinTable(tid: TableId, uid: UserId): IO[Result]
   def leaveTable(tid: TableId, uid: UserId): IO[Result]
-
   def placeBet(tid: TableId, gid: GameId, uid: UserId, bet: Bet): IO[Result]
   def removeBet(tid: TableId, gid: GameId, uid: UserId): IO[Result]
+
+  def joinTable2(tid: TableId, uid: Set[UserId]): IO[Result]
+  def leaveTable2(tid: TableId, uid: Set[UserId]): IO[Result]
+  def placeBets(tid: TableId, uid: List[(UserId, GameId, Bet)]): IO[Result]
+  def removeBets(tid: TableId, uid: List[(UserId, GameId)]): IO[Result]
 }
 
 object TableManager {
@@ -74,7 +78,7 @@ object TableManager {
         .updateState(tid) { s: TableState =>
           val updatedState = s.copy(users = s.users + uid)
           val events = updatedState.users.toList.map { sittingUser =>
-            TE.JoinedTable(tid, sittingUser, List(uid))
+            TE.JoinedTable(tid, sittingUser, Set(uid))
           }
 
           updatedState -> Result(updatedState, events)
@@ -85,7 +89,7 @@ object TableManager {
         .updateState(tid) { s: TableState =>
           val updatedState = s.copy(users = s.users - uid)
           val events = updatedState.users.toList.map { sittingUser =>
-            TE.LeftTable(tid, sittingUser, List(uid))
+            TE.LeftTable(tid, sittingUser, Set(uid))
           }
 
           updatedState -> Result(updatedState, events)
@@ -120,5 +124,60 @@ object TableManager {
           case s => s -> Result(s)
         }
 
+    override def joinTable2(tid: TableId, uid: Set[UserId]): IO[Result] =
+      stateStorage
+        .updateState(tid) { s: TableState =>
+          val updatedState = s.copy(users = s.users ++ uid)
+          val events = updatedState.users.toList.map { sittingUser =>
+            TE.JoinedTable(tid, sittingUser, uid)
+          }
+
+          updatedState -> Result(updatedState, events)
+        }
+
+    override def leaveTable2(tid: TableId, uid: Set[UserId]): IO[Result] =
+      stateStorage
+        .updateState(tid) { s: TableState =>
+          val updatedState = s.copy(users = s.users -- uid)
+          val events = updatedState.users.toList.map { sittingUser =>
+            TE.LeftTable(tid, sittingUser, uid)
+          }
+
+          updatedState -> Result(updatedState, events)
+        }
+
+    override def placeBets(tid: TableId, uid: List[(UserId, GameId, Bet)]): IO[Result] =
+      stateStorage
+        .updateState(tid) {
+          case TableState(tid, users, Some(game)) if game.betsOpen =>
+            val updatedGame = uid.foldLeft(game) {
+              case (g, (userId, gid, bet)) =>
+                if (g.id == gid && !g.betExists(userId, bet.id)) {
+                  val userBets = g.bets.getOrElse(userId, List.empty) :+ bet
+                  g.copy(bets = g.bets + (userId -> userBets))
+                } else g
+            }
+            val updatedState = TableState(tid, users, Some(updatedGame))
+            val events       = uid.map { case (userId, gid, bet) => TE.BetAccepted(tid, gid, userId, bet) }
+
+            updatedState -> Result(updatedState, events)
+          case s => s -> Result(s, List.empty)
+        }
+
+    override def removeBets(tid: TableId, uid: List[(UserId, GameId)]): IO[Result] =
+      stateStorage
+        .updateState(tid) {
+          case TableState(tid, users, Some(game)) =>
+            val updatedGame = uid.foldLeft(game) {
+              case (g, (userId, gid)) if g.id == gid =>
+                g.copy(bets = g.bets - userId)
+              case (g, _) => g
+            }
+            val updatedState = TableState(tid, users, Some(updatedGame))
+            val events       = uid.map { case (userId, gid) => TE.BetRemoved(tid, gid, userId, List.empty) }
+
+            updatedState -> Result(updatedState, events)
+          case s => s -> Result(s, List.empty)
+        }
   }
 }

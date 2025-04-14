@@ -19,8 +19,8 @@ object UserEvent {
   case class BetsOpened(tid: TableId, gid: GameId)                  extends UserEvent
   case class BetsClosed(tid: TableId, gid: GameId)                  extends UserEvent
   case class UserStateProvided(state: UserState)                    extends UserEvent
-  case class UsersJoinedTable(joined: List[UserId])                 extends UserEvent
-  case class UsersLeftTable(left: List[UserId])                     extends UserEvent
+  case class UsersJoinedTable(joined: Set[UserId])                  extends UserEvent
+  case class UsersLeftTable(left: Set[UserId])                      extends UserEvent
   case class GameFinished(tid: TableId, gid: GameId, result: Int)   extends UserEvent
 
   def make(f: (EventId, Instant) => UserEvent): IO[UserEvent] = (IO.randomUUID.map(EventId(_)), IO.realTimeInstant).mapN(f)

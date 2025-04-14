@@ -1,13 +1,10 @@
 package fr.user
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
-import fr.domain.table.{TableEvent => TE}
 import fr.domain.table.TableEvent.{TableEventEnvelope => TEE}
+import fr.domain.table.{TableEvent => TE}
 import fr.domain.user.{UserEvent, UserInput, UserAction => UA}
 import fr.user.UserManager.Result
-
-import java.time.Instant
 
 sealed trait IncomingHandler {
   def fromTable(e: TEE): IO[Result]
