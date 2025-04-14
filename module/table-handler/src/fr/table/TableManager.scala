@@ -29,9 +29,6 @@ trait TableManager {
 
 object TableManager {
   case class Result(state: TableState, events: List[TE] = List.empty)
-  object Result {
-    implicit val codec: Codec[Result] = deriveCodec[Result]
-  }
 
   def make(stateStorage: StateStorage[TableId, TableState, Result]): TableManager = new TableManager {
     override def getUsers(tid: TableId): IO[Set[UserId]] = stateStorage.get(tid).map(_.users)

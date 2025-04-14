@@ -30,9 +30,6 @@ trait UserManager {
 
 object UserManager {
   case class Result(state: UserState, events: List[UserEvent] = List.empty, actions: List[UserTableAction] = List.empty)
-  object Result {
-    implicit val codec: Codec[Result] = deriveCodec[Result]
-  }
 
   def make(stateStorage: StateStorage[UserId, UserState, Result]): UserManager = new UserManager {
     override def get(uid: UserId): IO[UserState] = stateStorage.get(uid)

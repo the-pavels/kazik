@@ -49,7 +49,7 @@ object StateStorage {
 
   final val CAS_SCRIPT_NIL_MARKER = "__EXPECT_NIL__"
 
-  def redis[K, S: Codec, R: Codec](client: RedisClient, mkKey: K => String, default: K => S): Resource[IO, StateStorage[K, S, R]] =
+  def redis[K, S: Codec, R](client: RedisClient, mkKey: K => String, default: K => S): Resource[IO, StateStorage[K, S, R]] =
     for {
       redisDefault  <- Redis[IO].fromClient(client, RedisCodec.Utf8)
       casScriptSha1 <- Resource.eval(redisDefault.scriptLoad(CAS_SCRIPT_CONTENT))
