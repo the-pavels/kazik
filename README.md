@@ -65,3 +65,20 @@ sbt devapp/run
 ```bash
 sbt "simulator/testOnly fr.simulator.scenario.HappyPathSuite"
 ```
+
+## TODO
+1. Improve error handling and partial acknowledgement of events (fr.table.IncomingHandler:35).
+2. Consider using adaptive backoff strategies for State Storage.
+3. Consider using circuit breakers for Redis interactions, eg:
+```scala
+import cats.effect.std.CircuitBreaker
+
+val circuitBreaker = CircuitBreaker.of[IO](
+  maxFailures = 5,
+  resetTimeout = 10.seconds,
+  exponentialBackoffFactor = 2.0
+)
+
+circuitBreaker.protect(stateStorage.updateState(tid)(updateFn))
+```
+4. Consider using Rest API instead of WS and use Pusher or `soketi` for real-time client updates.
